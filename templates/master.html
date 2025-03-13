@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Master Node</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.95/Build/Cesium/Cesium.js"></script>
+    <link rel="stylesheet" href="https://cesium.com/downloads/cesiumjs/releases/1.95/Build/Cesium/Widgets/widgets.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+</head>
+
+<body>
+    <div id="room-id-display">Room ID: <span id="room-id"></span></div>
+    <div id="cesiumContainer"></div>
+    <script>
+        const socket = io();
+        let viewer, roomId;
+
+        Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI0MTMzMTYzZC1hOGRkLTQwOTUtODcxYy1hOWM2ODViNDk4ZTYiLCJpZCI6MjgzNTcxLCJpYXQiOjE3NDE3NzM3MDl9.sT6vwcKf_lB8lGer8FuVhD4g5WA-5umnnKA3iMjvwJY';
+
+        viewer = new Cesium.Viewer('cesiumContainer', {
+            animation: false,
+            baseLayerPicker: false,
+            fullscreenButton: false,
+            vrButton: true,
+            timeline: false,
+            scene3DOnly: true
+        });
+
+        // Initialize room and set up camera tracking
+        viewer.scene.postRender.addEventListener(() => {
+            if (!roomId) {
+                socket.emit('create_room');
+                return;
+            }
+
+            const camera = viewer.camera;
+            const position = camera.positionCartographic;
+            const direction = camera.directionWC;
+
+            socket.emit('camera_update', {
+                room_id: roomId,
+                position: {
+                    longitude: Cesium.Math.toDegrees(position.longitude),
+                    latitude: Cesium.Math.toDegrees(position.latitude),
+                    height: position.height
+                },
+                direction: {
+                    x: direction.x,
+                    y: direction.y,
+                    z: direction.z
+                },
+                orientation: {
+                    heading: camera.heading,
+                    pitch: camera.pitch,
+                    roll: camera.roll
+                }
+            });
+        });
+
+        socket.on('room_created', (data) => {
+            roomId = data.room_id;
+            document.getElementById('room-id').textContent = roomId;
+        });
+
+
+        // Send focal point instead of raw camera data
+        socket.emit('camera_update', {
+            room_id: roomId,
+            position: {
+                longitude: Cesium.Math.toDegrees(viewPosition.longitude),
+                latitude: Cesium.Math.toDegrees(viewPosition.latitude),
+                height: viewPosition.height
+            },
+            orientation: {
+                heading: camera.heading,
+                pitch: camera.pitch,
+                roll: camera.roll
+            }
+        });
+    </script>
+</body>
+
+</html>

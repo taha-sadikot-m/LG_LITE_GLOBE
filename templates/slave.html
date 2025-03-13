@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Slave Node</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.95/Build/Cesium/Cesium.js"></script>
+    <link rel="stylesheet" href="https://cesium.com/downloads/cesiumjs/releases/1.95/Build/Cesium/Widgets/widgets.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+</head>
+<body>
+    <div class="join-form">
+        <input type="text" id="roomId" placeholder="Room ID">
+        <select id="position">
+            <option value="right">Right</option>
+            <option value="left">Left</option>
+        </select>
+        <button onclick="connectToRoom()">Connect</button>
+    </div>
+    <div id="cesiumContainer"></div>
+    <script>
+        const socket = io();
+        let viewer, roomId, position;
+        const SCREEN_ANGLE = 30; // Degrees between screens
+        const EARTH_RADIUS = 6378137; // Meters
+        const FOCAL_HEIGHT = 1000000; // Altitude above Earth's surface
+
+        function connectToRoom() {
+            roomId = document.getElementById('roomId').value.trim();
+            position = document.getElementById('position').value;
+            if (!roomId) return alert('Please enter Room ID');
+            document.querySelector('.join-form').style.display = 'none';
+            initializeViewer();
+            socket.emit('join_room', { room_id: roomId, position: position });
+        }
+
+        function initializeViewer() {
+            Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI0MTMzMTYzZC1hOGRkLTQwOTUtODcxYy1hOWM2ODViNDk4ZTYiLCJpZCI6MjgzNTcxLCJpYXQiOjE3NDE3NzM3MDl9.sT6vwcKf_lB8lGer8FuVhD4g5WA-5umnnKA3iMjvwJY';
+            
+            viewer = new Cesium.Viewer('cesiumContainer', {
+                animation: false,
+                baseLayerPicker: false,
+                fullscreenButton: false,
+                vrButton: false,
+                timeline: false,
+                sceneMode: Cesium.SceneMode.SCENE3D,
+                orderIndependentTranslucency: true
+            });
+
+            // Optimize rendering for smooth updates
+            viewer.scene.preRender.addEventListener(() => {
+                viewer.scene.requestRender();
+            });
+        }
+
+        socket.on('camera_update', (data) => {
+            if (!viewer) return;
+
+            try {
+                const masterPos = data.position;
+                const angleOffset = position === 'right' ? -SCREEN_ANGLE : SCREEN_ANGLE;
+
+                // 1. Calculate focal point (shared center)
+                const focalPoint = Cesium.Cartesian3.fromDegrees(
+                    masterPos.longitude,
+                    masterPos.latitude,
+                    FOCAL_HEIGHT
+                );
+
+                // 2. Calculate slave camera position (orbit around focal point)
+                const slavePosition = rotatePosition(
+                    focalPoint,
+                    angleOffset,
+                    EARTH_RADIUS * 2.5
+                );
+
+                // 3. Configure panoramic frustum
+                configureFrustum(position);
+
+                // 4. Set camera view with precise orientation
+                viewer.camera.setView({
+                    destination: slavePosition,
+                    orientation: {
+                        direction: Cesium.Cartesian3.subtract(
+                            focalPoint,
+                            slavePosition,
+                            new Cesium.Cartesian3()
+                        ),
+                        up: viewer.scene.globe.ellipsoid.geodeticSurfaceNormal(slavePosition)
+                    }
+                });
+
+            } catch (error) {
+                console.error('Camera sync error:', error);
+            }
+        });
+
+        function rotatePosition(center, angleDegrees, radius) {
+            const angle = Cesium.Math.toRadians(angleDegrees);
+            const rotation = Cesium.Matrix3.fromRotationZ(angle);
+            const offset = new Cesium.Cartesian3(radius, 0, 0);
+            return Cesium.Matrix3.multiplyByVector(
+                rotation,
+                offset,
+                new Cesium.Cartesian3()
+            );
+        }
+
+        function configureFrustum(position) {
+            const aspectRatio = 16/9;
+            let left, right;
+
+            // Horizontal panoramic configuration
+            switch(position) {
+                case 'right':
+                    left = -0.5 * aspectRatio;
+                    right = 0.5 * aspectRatio;
+                    break;
+                case 'left':
+                    left = -0.5 * aspectRatio;
+                    right = 0.5 * aspectRatio;
+                    break;
+            }
+
+            viewer.camera.frustum = new Cesium.PerspectiveOffCenterFrustum({
+                left: left,
+                right: right,
+                top: 1.0,
+                bottom: -1.0,
+                near: 100,
+                far: 100000000
+            });
+        }
+    </script>
+</body>
+</html>

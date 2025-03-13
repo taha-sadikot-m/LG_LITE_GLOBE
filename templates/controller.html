@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Controller</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+</head>
+<body>
+    <div class="control-panel">
+        <input type="text" id="searchInput" placeholder="Search location...">
+        <div id="searchResults"></div>
+        <button id="addPlacemark">Add Placemark</button>
+        <div id="placemarks-list"></div>
+    </div>
+    <script>
+        const socket = io();
+        let currentRoom;
+
+        document.getElementById('searchInput').addEventListener('input', async (e) => {
+            const response = await fetch(`/search?q=${e.target.value}`);
+            const results = await response.json();
+            // Display results and handle selection
+        });
+
+        document.getElementById('addPlacemark').addEventListener('click', () => {
+            // Implement placemark addition logic
+        });
+    </script>
+</body>
+</html>
